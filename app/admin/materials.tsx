@@ -245,56 +245,49 @@ export default function AdminMaterialsScreen() {
             try {
               const supabase = getSupabaseClient();
               
-              console.log('🗑️ Starting deletion for material:', material.id, material.title);
+              console.log('Deleting material:', material.id);
 
-              // Step 1: Delete from database first
-              console.log('📊 Deleting from database...');
-              const { error: dbError } = await supabase
-                .from('study_materials')
-                .delete()
-                .eq('id', material.id);
-
-              if (dbError) {
-                console.error('❌ Database deletion error:', dbError);
-                throw new Error(`Database deletion failed: ${dbError.message}`);
-              }
-
-              console.log('✅ Database deletion successful');
-
-              // Step 2: Try to delete from storage (non-critical)
+              // Extract file path from URL
               try {
                 const url = new URL(material.file_url);
                 const pathParts = url.pathname.split('/');
                 const bucketIndex = pathParts.indexOf('study-materials');
                 
                 if (bucketIndex !== -1 && bucketIndex < pathParts.length - 1) {
-                  const filePath = decodeURIComponent(pathParts.slice(bucketIndex + 1).join('/'));
-                  console.log('🗄️ Attempting to delete file from storage:', filePath);
+                  const filePath = pathParts.slice(bucketIndex + 1).join('/');
+                  console.log('Deleting file from storage:', filePath);
 
                   const { error: storageError } = await supabase.storage
                     .from('study-materials')
                     .remove([filePath]);
 
                   if (storageError) {
-                    console.warn('⚠️ Storage deletion warning (non-critical):', storageError.message);
+                    console.warn('Storage deletion warning:', storageError.message);
                   } else {
-                    console.log('✅ File deleted from storage');
+                    console.log('File deleted from storage');
                   }
-                } else {
-                  console.warn('⚠️ Could not extract file path from URL');
                 }
               } catch (urlError) {
-                console.warn('⚠️ Storage cleanup failed (non-critical):', urlError);
+                console.warn('Could not parse URL for storage deletion:', urlError);
               }
 
-              Alert.alert('Deleted!', `"${material.title}" has been deleted successfully`);
+              // Delete from database
+              const { error: dbError } = await supabase
+                .from('study_materials')
+                .delete()
+                .eq('id', material.id);
+
+              if (dbError) {
+                console.error('Database deletion error:', dbError);
+                throw new Error(`Failed to delete: ${dbError.message}`);
+              }
+
+              console.log('Material deleted from database successfully');
+              Alert.alert('Success', 'Material deleted successfully');
               loadData();
             } catch (error: any) {
-              console.error('❌ Deletion failed:', error);
-              Alert.alert(
-                'Deletion Failed',
-                error.message || 'Could not delete material. Please check your permissions and try again.'
-              );
+              console.error('Delete failed:', error);
+              Alert.alert('Error', error.message || 'Failed to delete material');
             }
           },
         },

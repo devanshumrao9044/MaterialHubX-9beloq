@@ -145,20 +145,23 @@ export default function CheckoutScreen() {
 
     setPlacing(true);
     try {
-      // Create order with coupon if applied
       const { data: order, error } = await storeService.createOrder(
         user.id,
         address,
-        paymentMethod,
-        couponApplied?.valid ? couponApplied.code : undefined,
-        couponApplied?.valid ? couponApplied.discount_amount : undefined
+        paymentMethod
       );
 
       if (error) throw error;
 
-      // Navigate to payment screen
-      router.replace(
-        `/payment?orderId=${order.id}&amount=${order.total_amount}&method=${paymentMethod}`
+      Alert.alert(
+        'Order Placed Successfully!',
+        `Your order #${order.order_number} has been placed.\n\nTotal: ₹${order.total_amount}`,
+        [
+          {
+            text: 'View Order',
+            onPress: () => router.replace(`/orders/${order.id}`),
+          },
+        ]
       );
     } catch (error: any) {
       console.error('Error placing order:', error);
@@ -386,10 +389,7 @@ export default function CheckoutScreen() {
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <>
-              <MaterialIcons name="lock" size={20} color="#FFFFFF" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.placeOrderText}>Proceed to Payment</Text>
-              </View>
+              <Text style={styles.placeOrderText}>Place Order</Text>
               <Text style={styles.placeOrderAmount}>₹{getFinalTotal().toFixed(2)}</Text>
             </>
           )}
