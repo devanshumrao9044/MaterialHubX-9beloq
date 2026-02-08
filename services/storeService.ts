@@ -162,7 +162,9 @@ class StoreService {
   async createOrder(
     userId: string,
     shippingAddress: Order['shipping_address'],
-    paymentMethod: string
+    paymentMethod: string,
+    couponCode?: string,
+    discountAmount?: number
   ) {
     const supabase = getSupabaseClient();
 
@@ -183,17 +185,24 @@ class StoreService {
       return { data: null, error: orderNumError };
     }
 
+    // Calculate final total after discount
+    const finalTotal = couponCode && discountAmount 
+      ? totalAmount - discountAmount 
+      : totalAmount;
+
     // Create order
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert({
         user_id: userId,
         order_number: orderNumber,
-        total_amount: totalAmount,
+        total_amount: finalTotal,
         status: 'placed',
         payment_status: 'pending',
         payment_method: paymentMethod,
         shipping_address: shippingAddress,
+        coupon_code: couponCode || null,
+        discount_amount: discountAmount || 0,
       })
       .select()
       .single();
