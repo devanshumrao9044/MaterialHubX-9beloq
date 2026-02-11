@@ -65,6 +65,7 @@ export default function AdminDashboardScreen() {
   const adminCards = [
     { icon: 'school', title: 'Batches', route: '/admin/batches', color: '#6C63FF' },
     { icon: 'library-books', title: 'Materials', route: '/admin/materials', color: '#8B5CF6' },
+    { icon: 'quiz', title: 'Quizzes', route: '/admin/quizzes', color: '#9C27B0' },
     { icon: 'people', title: 'Users', route: '/admin/users', color: '#4CAF50' },
     { icon: 'store', title: 'Store', route: '/admin/store', color: '#FFA726' },
     { icon: 'shopping-bag', title: 'Orders', route: '/admin/orders', color: '#2196F3' },

@@ -64,6 +64,9 @@ export function Drawer({ visible, onClose }: DrawerProps) {
 
   const menuItems = [
     { icon: 'receipt-long', label: 'My Orders', route: '/orders' },
+    { icon: 'library-books', label: 'Library', route: '/library' },
+    { icon: 'assignment', label: 'Test Series', route: '/test-series' },
+    { icon: 'quiz', label: 'Quizzes', route: '/(tabs)/quiz' },
     { icon: 'settings', label: 'Settings', route: '/settings' },
     { icon: 'card-giftcard', label: 'Refer & Earn', route: '/refer-earn' },
     { icon: 'leaderboard', label: 'Leaderboard', route: '/leaderboard' },
