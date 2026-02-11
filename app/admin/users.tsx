@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, TextInput } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  TextInput,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -13,16 +22,18 @@ interface UserProfile {
   username: string | null;
   email: string;
   total_xp: number;
-  created_at: string;
-  last_active_at: string | null;
+  selected_institute_id: string | null;
+  selected_batch_id: string | null;
+  last_active_at: string;
 }
 
 export default function AdminUsersScreen() {
-  const { isDarkMode } = useApp();
-  const theme = useTheme(isDarkMode);
+  const theme = useTheme(useApp().isDarkMode);
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -30,60 +41,95 @@ export default function AdminUsersScreen() {
     loadUsers();
   }, []);
 
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      const filtered = users.filter(
+        (user) =>
+          user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          user.username?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setFilteredUsers(filtered);
+    } else {
+      setFilteredUsers(users);
+    }
+  }, [searchQuery, users]);
+
   const loadUsers = async () => {
     try {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('total_xp', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
+
+      console.log('Loaded users:', data?.length);
       setUsers(data || []);
-    } catch (error) {
+      setFilteredUsers(data || []);
+    } catch (error: any) {
       console.error('Error loading users:', error);
+      Alert.alert('Error', error.message || 'Failed to load users');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleResetPassword = (user: UserProfile) => {
-    Alert.alert(
-      'Reset Password',
-      `Reset password for ${user.email}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          onPress: () => {
-            Alert.alert('Info', 'Password reset functionality requires Edge Function implementation');
-          },
-        },
-      ]
-    );
-  };
+  const handleDeleteUser = (user: UserProfile) => {
+    if (user.email === 'admin@materialhubx.com') {
+      Alert.alert('Error', 'Cannot delete admin user');
+      return;
+    }
 
-  const handleBanUser = (user: UserProfile) => {
     Alert.alert(
-      'Ban User',
-      `Are you sure you want to ban ${user.email}?`,
+      'Delete User',
+      `Are you sure you want to delete user "${user.email}"? This will delete all their data permanently.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Ban',
+          text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            Alert.alert('Info', 'User ban functionality requires Edge Function implementation');
+          onPress: async () => {
+            try {
+              const supabase = getSupabaseClient();
+              
+              console.log('Deleting user:', user.id);
+
+              // Delete from user_profiles (cascade will handle related data)
+              const { error } = await supabase
+                .from('user_profiles')
+                .delete()
+                .eq('id', user.id);
+
+              if (error) {
+                console.error('Delete error:', error);
+                throw new Error(`Failed to delete user: ${error.message}`);
+              }
+
+              console.log('User deleted successfully');
+              Alert.alert('Success', 'User deleted successfully');
+              loadUsers();
+            } catch (error: any) {
+              console.error('Delete failed:', error);
+              Alert.alert('Error', error.message || 'Failed to delete user');
+            }
           },
         },
       ]
     );
   };
 
-  const filteredUsers = users.filter(user =>
-    user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.username?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -95,78 +141,100 @@ export default function AdminUsersScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Manage Users</Text>
+          <Text style={styles.headerTitle}>User Management</Text>
           <View style={{ width: 24 }} />
         </View>
 
-        <View style={styles.searchContainer}>
+        <View style={[styles.searchBar, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
           <MaterialIcons name="search" size={20} color="#FFFFFF" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search users..."
+            placeholder="Search by email or username..."
             placeholderTextColor="rgba(255,255,255,0.6)"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <MaterialIcons name="clear" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
         </View>
       </LinearGradient>
 
-      <View style={styles.statsBar}>
-        <Text style={[styles.statsText, { color: theme.textSecondary }]}>
-          Total Users: {users.length}
-        </Text>
-      </View>
-
-      <FlatList
-        data={filteredUsers}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        refreshing={loading}
-        onRefresh={loadUsers}
-        renderItem={({ item }) => (
-          <View style={[styles.userCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <View style={styles.userHeader}>
-              <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
-                <Text style={styles.avatarText}>
-                  {item.username?.[0]?.toUpperCase() || item.email[0].toUpperCase()}
-                </Text>
-              </View>
-              <View style={styles.userInfo}>
-                <Text style={[styles.userName, { color: theme.text }]}>
-                  {item.username || 'No name'}
-                </Text>
-                <Text style={[styles.userEmail, { color: theme.textSecondary }]}>
-                  {item.email}
-                </Text>
-                <View style={styles.xpBadge}>
-                  <MaterialIcons name="star" size={14} color="#FFD700" />
-                  <Text style={[styles.xpText, { color: theme.textSecondary }]}>
-                    {item.total_xp} XP
-                  </Text>
-                </View>
-              </View>
+      {loading ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
+      ) : (
+        <>
+          <View style={[styles.statsBar, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, { color: theme.primary }]}>{users.length}</Text>
+              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Users</Text>
             </View>
-
-            <View style={styles.userActions}>
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: theme.primary }]}
-                onPress={() => handleResetPassword(item)}
-              >
-                <MaterialIcons name="lock-reset" size={18} color="#FFFFFF" />
-                <Text style={styles.actionText}>Reset</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: theme.error }]}
-                onPress={() => handleBanUser(item)}
-              >
-                <MaterialIcons name="block" size={18} color="#FFFFFF" />
-                <Text style={styles.actionText}>Ban</Text>
-              </TouchableOpacity>
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, { color: theme.success }]}>{filteredUsers.length}</Text>
+              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Filtered</Text>
             </View>
           </View>
-        )}
-      />
+
+          <FlatList
+            data={filteredUsers}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            refreshing={loading}
+            onRefresh={loadUsers}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <MaterialIcons name="person-off" size={64} color={theme.textSecondary} />
+                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                  {searchQuery ? 'No users found matching your search' : 'No users registered yet'}
+                </Text>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <View style={[styles.userCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <View style={styles.userHeader}>
+                  <View style={[styles.userAvatar, { backgroundColor: theme.primary }]}>
+                    <Text style={styles.avatarText}>
+                      {item.username?.[0]?.toUpperCase() || item.email[0].toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.userInfo}>
+                    <Text style={[styles.userName, { color: theme.text }]}>
+                      {item.username || 'No username set'}
+                    </Text>
+                    <Text style={[styles.userEmail, { color: theme.textSecondary }]}>
+                      {item.email}
+                    </Text>
+                    <View style={styles.userMeta}>
+                      <View style={styles.xpBadge}>
+                        <MaterialIcons name="star" size={14} color="#FFD700" />
+                        <Text style={[styles.xpText, { color: theme.text }]}>
+                          {item.total_xp} XP
+                        </Text>
+                      </View>
+                      <Text style={[styles.lastActive, { color: theme.textSecondary }]}>
+                        Active: {formatDate(item.last_active_at)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {item.email !== 'admin@materialhubx.com' && (
+                  <TouchableOpacity
+                    style={styles.deleteBtn}
+                    onPress={() => handleDeleteUser(item)}
+                  >
+                    <MaterialIcons name="delete" size={20} color={theme.error} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          />
+        </>
+      )}
     </View>
   );
 }
@@ -190,42 +258,67 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  searchContainer: {
+  searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
   },
   searchInput: {
     flex: 1,
-    marginLeft: Spacing.sm,
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 14,
   },
   statsBar: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    flexDirection: 'row',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderBottomWidth: 1,
   },
-  statsText: {
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  statLabel: {
     ...Typography.caption,
-    fontWeight: '600',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   listContent: {
     padding: Spacing.md,
   },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl * 2,
+  },
+  emptyText: {
+    ...Typography.body,
+    marginTop: Spacing.md,
+    textAlign: 'center',
+  },
   userCard: {
+    flexDirection: 'row',
     padding: Spacing.md,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     marginBottom: Spacing.md,
+    alignItems: 'center',
   },
   userHeader: {
+    flex: 1,
     flexDirection: 'row',
-    marginBottom: Spacing.md,
   },
-  avatar: {
+  userAvatar: {
     width: 48,
     height: 48,
     borderRadius: BorderRadius.full,
@@ -246,8 +339,13 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   userEmail: {
-    ...Typography.caption,
+    ...Typography.small,
     marginBottom: 4,
+  },
+  userMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
   },
   xpBadge: {
     flexDirection: 'row',
@@ -255,25 +353,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   xpText: {
-    ...Typography.small,
+    ...Typography.caption,
     fontWeight: '600',
   },
-  userActions: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
+  lastActive: {
+    ...Typography.caption,
   },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.sm,
-    gap: 4,
-  },
-  actionText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+  deleteBtn: {
+    padding: Spacing.sm,
   },
 });
